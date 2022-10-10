@@ -3,52 +3,77 @@ package main
 import (
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
+
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 	//"errors"
 )
 
 type Book struct {
-	ID       string `json:"id"`
+	ID       int    `json:"id" gorm:"primaryKey"`
 	Title    string `json:"title"`
 	Author   string `json:"author"`
 	Quantity int    `json:"quantity"`
 }
 
-var books = []Book{
-	{ID: "1", Title: "In search of lost time", Author: "Marcel Proust", Quantity: 2},
-	{ID: "2", Title: "The Great Gatsby", Author: "F. Scott Fitzgerald", Quantity: 5},
-	{ID: "3", Title: "War and peace", Author: "Leo Tolstoy", Quantity: 6},
-}
-
 func getBooks(ctx *gin.Context) {
-	ctx.IndentedJSON(http.StatusOK, books)
+
+	db, err := gorm.Open(sqlite.Open("test.db"), &gorm.Config{})
+	if err != nil {
+		panic("Failed to connect database!")
+	}
+
+	var results []Book
+	db.Table("books").Find(&results)
+	ctx.IndentedJSON(http.StatusOK, results)
 }
 
-func getBookById(id string) (*Book, error) {
-	for i, b := range books {
-		if b.ID == id {
-			return &books[i], nil
-		}
+func getBookById(id int) (*Book, error) {
+
+	db, err := gorm.Open(sqlite.Open("test.db"), &gorm.Config{})
+	if err != nil {
+		return nil, errors.New("failed to connect database")
+
 	}
-	return nil, errors.New("Book not found")
+	var book Book
+	db.Table("books").First(&book, id)
+	if err := db.Where("ID = ?", id).First(&book).Error; err != nil {
+		return nil, errors.New("Book not found")
+	}
+
+	return &book, nil
+
 }
 
 func createBook(ctx *gin.Context) {
+
+	db, err := gorm.Open(sqlite.Open("test.db"), &gorm.Config{})
+	if err != nil {
+		panic("Failed to connect database!")
+	}
 	var newBook Book
 
 	if err := ctx.BindJSON(&newBook); err != nil {
 		return
 	}
 
-	books = append(books, newBook)
+	db.Create(&Book{ID: newBook.ID, Title: newBook.Title, Author: newBook.Author, Quantity: newBook.Quantity})
 	ctx.IndentedJSON(http.StatusCreated, newBook)
 }
 
 func bookById(ctx *gin.Context) {
 
 	id := ctx.Param("id")
-	book, error := getBookById(id)
+	i, parseErr := strconv.Atoi(id)
+
+	if parseErr != nil {
+		panic("There was a parsing error")
+	}
+
+	book, error := getBookById(i)
 
 	if error != nil {
 		ctx.IndentedJSON(http.StatusNotFound, gin.H{"message": "Book not found"})
@@ -56,16 +81,26 @@ func bookById(ctx *gin.Context) {
 	}
 
 	ctx.IndentedJSON(http.StatusOK, book)
-
 }
+
 func checkoutBook(ctx *gin.Context) {
+
+	db, err := gorm.Open(sqlite.Open("test.db"), &gorm.Config{})
+	if err != nil {
+		panic("Failed to connect database!")
+	}
+
 	id, ok := ctx.GetQuery("id")
 	if !ok {
 		ctx.IndentedJSON(http.StatusBadRequest, gin.H{"message": "Missing query params"})
 		return
 	}
 
-	book, err := getBookById(id)
+	i, parseErr := strconv.Atoi(id)
+	if parseErr != nil {
+		panic("There was a parsing error")
+	}
+	book, err := getBookById(i)
 	if err != nil {
 		ctx.IndentedJSON(http.StatusNotFound, gin.H{"message": "Book not found"})
 		return
@@ -77,17 +112,26 @@ func checkoutBook(ctx *gin.Context) {
 	}
 
 	book.Quantity -= 1
+	db.Save(&book)
 	ctx.IndentedJSON(http.StatusOK, book)
 }
 
 func returnBook(ctx *gin.Context) {
+
+	db, err := gorm.Open(sqlite.Open("test.db"), &gorm.Config{})
+	if err != nil {
+		panic("Failed to connect database!")
+	}
 	id, ok := ctx.GetQuery("id")
 	if !ok {
 		ctx.IndentedJSON(http.StatusBadRequest, gin.H{"message": "Missing query params"})
 		return
 	}
-
-	book, err := getBookById(id)
+	i, parseErr := strconv.Atoi(id)
+	if parseErr != nil {
+		panic("There was a parsing error")
+	}
+	book, err := getBookById(i)
 
 	if err != nil {
 		ctx.IndentedJSON(http.StatusNotFound, gin.H{"message": "Book not found"})
@@ -95,11 +139,20 @@ func returnBook(ctx *gin.Context) {
 	}
 
 	book.Quantity += 1
+	db.Save(&book)
 	ctx.IndentedJSON(http.StatusOK, book)
 
 }
 
 func main() {
+
+	db, err := gorm.Open(sqlite.Open("test.db"), &gorm.Config{})
+
+	if err != nil {
+		panic("Failed to connect database!")
+	}
+
+	db.AutoMigrate(&Book{})
 	router := gin.Default()
 
 	router.GET("/books", getBooks)

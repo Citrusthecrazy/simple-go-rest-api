@@ -1,6 +1,6 @@
 {
-  "id": "4",
-  "title": "Hamlet",
-  "author": "Shakespeare",
-  "quantity": 2
+  "id": 4,
+  "title": "The Hobbit",
+  "author": "J. R. R. Tolkien",
+  "quantity": 12
 }
